@@ -1,0 +1,3 @@
+train=/Users/daniel/Documents/MATLAB/+SearchEnginesHW6/LOGISTIC/
+test=/Users/daniel/Documents/MATLAB/+SearchEnginesHW6/LOGISTIC/
+c=0.001
