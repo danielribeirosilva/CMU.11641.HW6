@@ -47,7 +47,7 @@ Xtrain = spdiags(1./sum(Xtrain,2),0,numRowsTrain,numRowsTrain)*Xtrain;
 Xtest = spdiags(1./sum(Xtest,2),0,numRowsTest,numRowsTest)*Xtest;
 
 %average row value
-avgValue = sum(Xtrain(Xtrain>0)) /  size(Xtrain(Xtrain>0),1);
+%avgValue = sum(Xtrain(Xtrain>0)) /  size(Xtrain(Xtrain>0),1);
 
 %Add column of 1's to data
 %Xtrain = [avgValue*(ones(size(Xtrain,1),1)) Xtrain];
@@ -94,7 +94,7 @@ while T < maxT && convValue > convPrecision
     LossFunction = bsxfun(@times,Ytrain,log(P)) + bsxfun(@times,(1-Ytrain),log(1-P));
     LossFunction = sum(LossFunction);
 
-    currentValue = LossFunction - 0.5*C*sum(dot(w(2:end),w(2:end)));
+    currentValue = LossFunction - 0.5*C*sum(dot(w,w));
 
     convValue = abs(lastValue - currentValue);
     lastValue = currentValue;
@@ -110,64 +110,25 @@ while T < maxT && convValue > convPrecision
 
 end
 
-%TESTING
-predictions = sign(Xtest*w');
-predictions(predictions==-1) = 0;
+%OUTPUTING MODEL
+predictions = 1 + exp(-Xtest*w');
+predictions = bsxfun(@rdivide,1,predictions);
 
+predictionFileName = ['predLR_C', num2str(C) ,'_alpha', num2str(alpha) ,'_T', num2str(maxT),'.txt'];
 
-%my own eval function for matlab
-fprintf('Computing Predictions ...\n');
+fileID = fopen(predictionFileName,'w');
 
-label = 1;
-%true negatives
-a = sum((predictions==label).*(Ytest~=label));
-%false positives
-b = sum((predictions==label).*(Ytest~=label));
-%false negatives
-c = sum((predictions~=label).*(Ytest==label));
-%true positives
-d = sum((predictions==label).*(Ytest==label));
-
-precision = d / (d + b);
-recall = d / (c + d);
-accuracy = (a + d) / (a + b + c + d);
-F1 = 2*precision*recall / (precision + recall);
-
-fprintf('P:%.3f, R:%.3f, F1:%.3f \n', precision, recall, F1);
-
-
-%total running time
-elapsedTime = toc;
-disp(elapsedTime);
-
-%save results
-LogReg.precision = precision;
-LogReg.recall = recall;
-LogReg.F1 = F1;
-LogReg.predictions = predictions;
-LogReg.C = C;
-LogReg.adaptativeLearningRate = adaptativeLearningRate;
-LogReg.alpha = alpha;
-LogReg.maxT = maxT;
-LogReg.elapsedTime = elapsedTime;
-
-%output all results as a .mat file
-%save LogReg.mat LogReg;
-
-%output .txt file for eval.cpp
-fileID = fopen('result.txt','w');
-
-%set test labels to zero
-%Ytest = zeros(size(Ytest));
-
-fprintf(fileID,'%i %i\n',[predictions'; Ytest']);
+fprintf(fileID,'%f %i\n',[predictions'; Ytest']);
 
 fclose(fileID);
 
+%RUN EVALUATION SCRIPT
 
+evalOutputFileName = ['evalLR_C', num2str(C) ,'_alpha', num2str(alpha) ,'_T', num2str(maxT),'.txt'];
 
+terminalCommand = ['perl Eval-Score.pl ' fileLocationTest ' ' predictionFileName ' ' evalOutputFileName ' 0'];
 
+[status,cmdout] = system(terminalCommand);
 
-
-
+toc
 

@@ -1,7 +1,7 @@
 function [Xv,Qid] = buildPairwiseTraingSet (Xcoarse,Ycoarse,QueryId)
     
     queryIds = unique(QueryId);
-    totalQueries = size(queryIds,2);
+    totalQueries = max(size(queryIds));
     Xv=[];
     Qid = [];
     
