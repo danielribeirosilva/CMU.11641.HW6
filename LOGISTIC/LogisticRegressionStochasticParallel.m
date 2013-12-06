@@ -1,13 +1,5 @@
-dataFilePath = strcat(pwd,'/DATA.TXT');
+dataFilePath = strcat(pwd,'/../DATA.TXT');
 [fileLocationTrain,fileLocationTest,C] = readDataFile (dataFilePath);
-
-%IF WISHES TO MANUALLY ENTRING DATA
-%C = 0.0001;
-%fileNameTrain = 'citeseer.train.ltc.svm';
-%fileNameTest = 'citeseer.test.ltc.svm';
-%dir = 'Users/daniel/Documents/MATLAB/+SearchEnginesHW5/+Data/';
-%fileLocationTrain = strcat(dir,fileNameTrain);
-%fileLocationTest = strcat(dir,fileNameTest);
 
 
 tic;
@@ -15,10 +7,12 @@ tic;
 
 %Import database
 % fprintf('loading training data...\n');
-% [Xtrain,Ytrain,QueryIdTrain] = readLabeledSparseMatrix (fileLocationTrain);
+ [Xtrain,Ytrain,QueryIdTrain] = readLabeledSparseMatrix (fileLocationTrain);
 % fprintf('loading testing data...\n');
-% [Xtest,Ytest,QueryIdTest] = readLabeledSparseMatrix (fileLocationTest);
+ [Xtest,Ytest,QueryIdTest] = readLabeledSparseMatrix (fileLocationTest);
 % fprintf('data loaded\n\n');
+
+%{
 load('train.mat');
 Xtrain = data.X;
 Ytrain = data.Y;
@@ -27,35 +21,50 @@ load('test.mat');
 Xtest = data.X;
 Ytest = data.Y;
 clearvars 'data';
-
+%}
 
 %Add custom parameters
-%Xtrain(:,size(Xtrain,2)+1) = sqrt(Xtrain(:,43).*Xtrain(:,2));
-%Xtest(:,size(Xtest,2)+1) = sqrt(Xtest(:,43).*Xtest(:,2)); 
 
+%Feature 1
+fOne = 39;
+fTwo = 40;
+avgOne = mean(Xtrain(:,fOne));
+avgTwo = mean(Xtrain(:,fTwo));
+Xtrain(:,size(Xtrain,2)+1) = sqrt( (Xtrain(:,fOne) - avgOne).*(Xtrain(:,fTwo) - avgTwo));
+Xtest(:,size(Xtest,2)+1) = sqrt( (Xtest(:,fOne) - avgOne).*(Xtest(:,fTwo) - avgTwo));
+
+%Feature 2
+Xtrain(:,size(Xtrain,2)+1) = Xtrain(:,14).*Xtrain(:,1);
+Xtest(:,size(Xtest,2)+1) = Xtest(:,14).*Xtest(:,1);
+
+%Feature 3
+Xtrain(:,size(Xtrain,2)+1) = Xtrain(:,34).*Xtrain(:,14);
+Xtest(:,size(Xtest,2)+1) = Xtest(:,34).*Xtest(:,14);
+
+
+
+
+Xtrain = normalizeMatrix(Xtrain);
 
 %Pairwise training
-[Xv,Qid] = buildPairwiseTraingSet (Xtrain,Ytrain,QueryIdTrain);
+[Xv,Qid] = buildPairwiseTrainingSet (Xtrain,Ytrain,QueryIdTrain);
 totalRowsV = size(Xv,1);
 Xtrain = [Xv;-Xv];
-Ytrain = [ones(totalRowsV,1);-ones(totalRowsV,1)];
+Ytrain = [ones(totalRowsV,1);zeros(totalRowsV,1)];
 
 %Normalize rows
-numRowsTrain = size(Xtrain,1);
-numRowsTest = size(Xtest,1);
-Xtrain = spdiags(1./sum(Xtrain,2),0,numRowsTrain,numRowsTrain)*Xtrain;
-Xtest = spdiags(1./sum(Xtest,2),0,numRowsTest,numRowsTest)*Xtest;
+%Xtrain = normalizeMatrix(Xtrain);
+Xtest = normalizeMatrix(Xtest);
 
-%average row value
-%avgValue = sum(Xtrain(Xtrain>0)) /  size(Xtrain(Xtrain>0),1);
+%numRowsTrain = size(Xtrain,1);
+%numRowsTest = size(Xtest,1);
+%Xtrain = spdiags(1./sum(Xtrain,2),0,numRowsTrain,numRowsTrain)*Xtrain;
+%Xtest = spdiags(1./sum(Xtest,2),0,numRowsTest,numRowsTest)*Xtest;
 
-%Add column of 1's to data
-%Xtrain = [avgValue*(ones(size(Xtrain,1),1)) Xtrain];
-%Xtest = [avgValue*(ones(size(Xtest,1),1)) Xtest];
 
 %Model parameters
-alpha = 0.00000001;
-convPrecision = 0.001;
+alpha = 0.004 / max(log(C/0.0001),1);
+convPrecision = 0.005;
 maxT = 100;
 adaptativeLearningRate = 0.95;
 FV_dimension = size(Xtrain,2);
@@ -114,7 +123,8 @@ end
 predictions = 1 + exp(-Xtest*w');
 predictions = bsxfun(@rdivide,1,predictions);
 
-predictionFileName = ['predLR_C', num2str(C) ,'_alpha', num2str(alpha) ,'_T', num2str(maxT),'.txt'];
+%predictionFileName = ['predLR_C', num2str(C) ,'_alpha', num2str(alpha) ,'_T', num2str(maxT),'.txt'];
+predictionFileName = './hw6_predictions.txt';
 
 fileID = fopen(predictionFileName,'w');
 
@@ -123,7 +133,7 @@ fprintf(fileID,'%f %i\n',[predictions'; Ytest']);
 fclose(fileID);
 
 %RUN EVALUATION SCRIPT
-
+%{
 evalOutputFileName = ['evalLR_C', num2str(C) ,'_alpha', num2str(alpha) ,'_T', num2str(maxT),'.txt'];
 
 terminalCommand = ['perl Eval-Score.pl ' fileLocationTest ' ' predictionFileName ' ' evalOutputFileName ' 0'];
@@ -131,4 +141,5 @@ terminalCommand = ['perl Eval-Score.pl ' fileLocationTest ' ' predictionFileName
 [status,cmdout] = system(terminalCommand);
 
 toc
+%}
 

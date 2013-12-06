@@ -1,119 +1,102 @@
-dataFolderPath = 'Users/daniel/Documents/MATLAB/+SearchEnginesHW5/+SVM/'; 
-trainFilePath = 'Users/daniel/Documents/MATLAB/+SearchEnginesHW5/+SVM/train.txt';
-testFilePath = 'Users/daniel/Documents/MATLAB/+SearchEnginesHW5/+SVM/test.txt';
-%binaryFolder = 'Users/daniel/Documents/MATLAB/+SearchEnginesHW5/SVM/';
-binaryFolder = '\+SearchEnginesHW5/+SVM/';
-binaryFolder2 = '+SearchEnginesHW5/+SVM/';
+dataFilePath = strcat(pwd,'/../DATA.TXT');
+[fileLocationTrain,fileLocationTest,C] = readDataFile (dataFilePath);
+
 
 tic;
-currentC = 0.0001;
-labels = 1:17;
+
+%Import database
+ %fprintf('loading training data...\n');
+ [Xtrain,Ytrain,QueryIdTrain] = readLabeledSparseMatrix (fileLocationTrain);
+ %fprintf('loading testing data...\n');
+ [Xtest,Ytest,QueryIdTest] = readLabeledSparseMatrix (fileLocationTest);
+% fprintf('data loaded\n\n');
+
+%{
+load('train.mat');
+Xtrain = data.X;
+Ytrain = data.Y;
+QueryIdTrain = data.QueryId;
+load('test.mat');
+Xtest = data.X;
+Ytest = data.Y;
+clearvars 'data';
+%}
+
+%Add custom parameters
+
+%Feature 1
+fOne = 39;
+fTwo = 40;
+avgOne = mean(Xtrain(:,fOne));
+avgTwo = mean(Xtrain(:,fTwo));
+Xtrain(:,size(Xtrain,2)+1) = sqrt( (Xtrain(:,fOne) - avgOne).*(Xtrain(:,fTwo) - avgTwo));
+Xtest(:,size(Xtest,2)+1) = sqrt( (Xtest(:,fOne) - avgOne).*(Xtest(:,fTwo) - avgTwo));
+
+%Feature 2
+Xtrain(:,size(Xtrain,2)+1) = Xtrain(:,14).*Xtrain(:,1);
+Xtest(:,size(Xtest,2)+1) = Xtest(:,14).*Xtest(:,1);
+
+%Feature 3
+Xtrain(:,size(Xtrain,2)+1) = Xtrain(:,34).*Xtrain(:,14);
+Xtest(:,size(Xtest,2)+1) = Xtest(:,34).*Xtest(:,14);
+
+
+
+
+
+
+
+
+
+
+%Pairwise training
+[Xv,Qid] = buildPairwiseTrainingSet (Xtrain,Ytrain,QueryIdTrain);
+Xtrain = Xv;
+
+%Normalize rows
+Xtrain = normalizeMatrix(Xtrain);
+Xtest = normalizeMatrix(Xtest);
+%numRowsTrain = size(Xtrain,1);
+%numRowsTest = size(Xtest,1);
+%Xtrain = spdiags(1./sum(Xtrain,2),0,numRowsTrain,numRowsTrain)*Xtrain;
+%Xtest = spdiags(1./sum(Xtest,2),0,numRowsTest,numRowsTest)*Xtest;
+
+%Output v vectors (for training) and x vectors (for testing)
+%to txt file in SVM_light format
+%fprintf('\nOutputing data do file ...\n');
+trainingFileName = 'temp_train.txt';
+outputMatrixToTxtFile (Xtrain, trainingFileName);
+testingFileName = 'temp_test.txt';
+outputMatrixToTxtFile (Xtest, testingFileName);
 
 
 %TRAIN -> GENERATE MODEL
-fprintf('\n%i Generating Models ...\n', size(labels,2));
-for currentClass = labels
-    
-    command = strcat(binaryFolder,'svm_learn');
-    commandOpts = strcat('-c',{' '},num2str(currentC));
-    commandInput = strcat(binaryFolder,'train_',num2str(currentClass),'.txt');
-    commandOutput = strcat(binaryFolder,'model_',num2str(currentC),'_',num2str(currentClass));
+%fprintf('\nGenerating Model ...\n');
+command = './svm_learn';
+commandOpts = ['-b 0 -# 20000 -c ',num2str(C)];
+modelFileName = ['SVMmodel_C' num2str(C)];
 
-    terminalCommand = strcat(command, {' '}, commandOpts, {' '}, commandInput, {' '}, commandOutput);
-    [status,cmdout] = system(terminalCommand{1});
-
-end
+terminalCommand = [command, ' ', commandOpts, ' ', trainingFileName, ' ', modelFileName];
+[statusA,cmdoutA] = system(terminalCommand);
 
 
+%TEST -> GENERATE RATING
+%fprintf('\nClassifying test data ...\n');
+command = './svm_classify';
 
-%TEST -> GENERATE PROJECTIONS
-fprintf('\nClassifying test data ...\n');
-for currentClass = 1:17
+%predictionsFileName = ['SVMpredictions_C' num2str(C) '.txt'];
+predictionsFileName = './hw6_predictions.txt';
 
-    command = strcat(binaryFolder,'svm_classify');
-    commandTestInput = strcat(binaryFolder,'test_',num2str(currentClass),'.txt');
-    commandModelInput = strcat(binaryFolder,'model_',num2str(currentC),'_',num2str(currentClass));
-    commandOutput = strcat(binaryFolder,'classification_',num2str(currentC),'_',num2str(currentClass));
-
-    terminalCommand = strcat(command, {' '}, commandTestInput, {' '}, commandModelInput, {' '}, commandOutput);
-    [status,cmdout] = system(terminalCommand{1});
-
-end
+terminalCommand = [command ' ' testingFileName ' ' modelFileName ' ' predictionsFileName];
+[statusB,cmdoutB] = system(terminalCommand);
 
 
+%RUN EVALUATION SCRIPT
+%{
+evalOutputFileName = ['evalSVM_C' num2str(C) '.txt'];
+terminalCommand = ['perl Eval-Score.pl ' fileLocationTest ' ' predictionsFileName ' ' evalOutputFileName ' 0'];
+[statusC,cmdoutC] = system(terminalCommand);
 
-%COMPILE RESULTS
-fprintf('\nCompiling results ...\n');
-allProjections = [];
-for currentClass = 1:17
-
-    classificationFile = strcat(binaryFolder2,'classification_',num2str(currentC),'_',num2str(currentClass));
-    fid = fopen(classificationFile,'r');
-    projection = fscanf(fid,'%f');
-    allProjections = [allProjections projection];
-    
-end
-
-
-%DO MULTI-CLASS CLASSIFICATION BY USING MAX
-%select model that gives highest projection for given Xi
-fprintf('Computing Predictions ...\n');
-
-[Xtest,Ytest] = SearchEnginesHW5.readLabeledSparseMatrix (testFilePath);
-[maxP, classPrediction] = max(allProjections');
-classPrediction = classPrediction';
-
-precisionVector = zeros(size(labels));
-recallVector = zeros(size(labels));
-F1Vector = zeros(size(labels));
-
-for i = 1:length(labels)
-    
-    label = labels(i);
-    fprintf('current label: %i\n', label);
-    
-    %true negatives
-    a = sum((classPrediction~=label).*(Ytest~=label));
-    %false positives
-    b = sum((classPrediction==label).*(Ytest~=label));
-    %false negatives
-    c = sum((classPrediction~=label).*(Ytest==label));
-    %true positives
-    d = sum((classPrediction==label).*(Ytest==label));
-
-    precision = d / (d + b);
-    recall = d / (c + d);
-    accuracy = (a + d) / (a + b + c + d);
-    F1 = 2*precision*recall / (precision + recall);
-    
-    precisionVector(i,1) = precision;
-    recallVector(i,1) = recall;
-    F1Vector(i,1) = F1;
-
-    %fprintf('P:%.3f, R:%.3f, A:%.3f \n', precision, recall, accuracy);
-    fprintf('P:%.3f, R:%.3f, F1:%.3f \n', precision, recall, F1);
-end
-
-%total running time
-elapsedTime = toc;
-fprintf('\nelapsed time: %f seconds\n',elapsedTime);
-
-%save results
-SVMresult.precision = precisionVector;
-SVMresult.avgPrecision = mean(precisionVector);
-SVMresult.recall = recallVector;
-SVMresult.avgRecall = mean(recallVector);
-SVMresult.F1 = F1Vector;
-SVMresult.avgF1 = mean(F1Vector);
-SVMresult.predictions = classPrediction;
-SVMresult.C = currentC;
-SVMresult.elapsedTime = elapsedTime;
-
-save SVMresult.mat SVMresult;
-
-%output .txt file for eval.cpp
-evalFileName = strcat('eval_SVM_',num2str(currentC),'.txt');
-fileID = fopen(evalFileName,'w');
-fprintf(fileID,'%i %i\n',[classPrediction'; Ytest']);
-fclose(fileID);
+toc
+%}
 
